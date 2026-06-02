@@ -1,6 +1,6 @@
-import re
+﻿import re
 from pathlib import Path
-from tree_sitter import Language, Parser
+from src.lang_scanning.ts_loader import create_parser_with_language
 from src.utils.import_graph_utils import append_graph_edge
 from src.lang_scanning.tree_utils import first_header_line, name_from_definition
 
@@ -10,24 +10,23 @@ class KotlinAnalyzer:
         self.file_path = code_path
         self.source_code = self._load_source(code_path)
 
-        self.language = Language('build/languages.so', "kotlin")
-        self.parser = Parser()
-        self.parser.set_language(self.language)
+        self.parser, self.language = create_parser_with_language("kotlin")
 
         self.tree = self._parse(self.source_code)
 
     # ==================================================
     # core helpers
     def _parse(self, source_code: str):
-        return self.parser.parse(bytes(source_code, "utf8"))
+        return self.parser.parse(source_code)
 
     def _walk(self, node):
         yield node
-        for child in node.children:
+        for i in range(node.child_count()):
+            child = node.child(i)
             yield from self._walk(child)
 
     def _text(self, node, source_code: str) -> str:
-        return source_code[node.start_byte:node.end_byte]
+        return source_code[node.start_byte():node.end_byte()]
 
     def _load_source(self, file_path: str) -> str:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -38,8 +37,8 @@ class KotlinAnalyzer:
     def get_import_list(self):
         imports = []
         seen = set()
-        for node in self._walk(self.tree.root_node):
-            if node.type == "import_header":
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() == "import_header":
                 text = self._text(node, self.source_code).strip()
                 if text not in seen:
                     seen.add(text)
@@ -84,8 +83,8 @@ class KotlinAnalyzer:
     def get_class_list(self):
         classes = []
         seen = set()
-        for node in self._walk(self.tree.root_node):
-            if node.type in ("class_declaration", "object_declaration"):
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() in ("class_declaration", "object_declaration"):
                 text = self._text(node, self.source_code).strip()
                 first_line = first_header_line(text)
                 if first_line not in seen:
@@ -102,8 +101,8 @@ class KotlinAnalyzer:
     def get_function_list(self):
         functions = []
         seen = set()
-        for node in self._walk(self.tree.root_node):
-            if node.type != "function_declaration":
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() != "function_declaration":
                 continue
             name = name_from_definition(
                 node, self.source_code, identifier_types=("simple_identifier", "identifier")
@@ -121,10 +120,10 @@ class KotlinAnalyzer:
     # comments
     def get_comment_lines(self):
         lines = set()
-        for node in self._walk(self.tree.root_node):
-            if "comment" in node.type:
-                start_line = node.start_point[0]
-                end_line = node.end_point[0]
+        for node in self._walk(self.tree.root_node()):
+            if "comment" in node.kind():
+                start_line = node.start_position().row
+                end_line = node.end_position().row
                 for i in range(start_line, end_line + 1):
                     lines.add(i)
 
@@ -148,12 +147,12 @@ class KotlinAnalyzer:
             "aes"
         ]
 
-        for node in self._walk(self.tree.root_node):
-            if node.type == "import_header":
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() == "import_header":
                 text = self._text(node, self.source_code).lower()
                 if any(i in text for i in crypto_imports):
                     return True
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(c in text for c in crypto_calls):
                 return True
@@ -167,9 +166,9 @@ class KotlinAnalyzer:
         }
 
         found = set()
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
-            if node.type in ["call_expression", "identifier"]:
+            if node.kind() in ["call_expression", "identifier"]:
                 for algo in crypto_algorithms:
                     if algo in text:
                         found.add(algo)
@@ -194,12 +193,12 @@ class KotlinAnalyzer:
             "database"
         ]
 
-        for node in self._walk(self.tree.root_node):
-            if node.type == "import_header":
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() == "import_header":
                 text = self._text(node, self.source_code).lower()
                 if any(d in text for d in db_imports):
                     return True
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(p in text for p in db_usage_patterns):
                 return True
@@ -225,8 +224,8 @@ class KotlinAnalyzer:
         ]
 
         found = set()
-        for node in self._walk(self.tree.root_node):
-            if node.type in ["call_expression", "identifier"]:
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() in ["call_expression", "identifier"]:
                 text = self._text(node, self.source_code).lower()
 
                 if any(op in text for op in db_operations):
@@ -246,7 +245,7 @@ class KotlinAnalyzer:
             "bufferedreader",
             "files.",
         ]
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(p in text for p in file_patterns):
                 return True
@@ -263,8 +262,8 @@ class KotlinAnalyzer:
             "retrofit",
             "websocket"
         ]
-        for node in self._walk(self.tree.root_node):
-            if node.type == "import_header":
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() == "import_header":
                 text = self._text(node, self.source_code).lower()
                 if any(n in text for n in network_imports):
                     return True
@@ -275,7 +274,7 @@ class KotlinAnalyzer:
             "httpclient",
             "retrofit"
         ]
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(c in text for c in network_calls):
                 return True
@@ -285,8 +284,8 @@ class KotlinAnalyzer:
     # ==================================================
     # auth usage detection
     def get_contains_auth_usage(self):
-        for node in self._walk(self.tree.root_node):
-            if node.type == "import_header":
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() == "import_header":
                 text = self._text(node, self.source_code).lower()
                 if "firebaseauth" in text:
                     return True
@@ -298,7 +297,7 @@ class KotlinAnalyzer:
             "token",
             "jwt"
         ]
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(p in text for p in auth_patterns):
                 return True
@@ -313,8 +312,8 @@ class KotlinAnalyzer:
             "cloud_firestore",
             "shared_preferences"
         ]
-        for node in self._walk(self.tree.root_node):
-            if node.type == "import_header":
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() == "import_header":
                 text = self._text(node, self.source_code).lower()
                 if any(b in text for b in backup_imports):
                     return True
@@ -327,10 +326,17 @@ class KotlinAnalyzer:
             "sync"
         ]
 
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(p in text for p in backup_patterns):
                 return True
 
         return False
+
+
+
+
+
+
+
 

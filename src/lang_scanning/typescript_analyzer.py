@@ -1,4 +1,4 @@
-from tree_sitter import Language, Parser
+﻿from src.lang_scanning.ts_loader import create_parser_with_language
 from src.lang_scanning.javascript_analyzer import JavaScriptAnalyzer
 
 
@@ -9,9 +9,7 @@ class TypeScriptAnalyzer(JavaScriptAnalyzer):
         self.file_path = code_path
         self.source_code = self._load_source(code_path)
 
-        self.language = Language('build/languages.so', "typescript")
-        self.parser = Parser()
-        self.parser.set_language(self.language)
+        self.parser, self.language = create_parser_with_language("typescript")
 
         self.tree = self._parse(self.source_code)
 
@@ -21,8 +19,13 @@ class TsxAnalyzer(TypeScriptAnalyzer):
         self.file_path = code_path
         self.source_code = self._load_source(code_path)
 
-        self.language = Language('build/languages.so', "tsx")
-        self.parser = Parser()
-        self.parser.set_language(self.language)
+        self.parser, self.language = create_parser_with_language("tsx")
 
         self.tree = self._parse(self.source_code)
+
+
+
+
+
+
+

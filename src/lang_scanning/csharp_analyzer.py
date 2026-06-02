@@ -1,6 +1,6 @@
-import re
+﻿import re
 from pathlib import Path
-from tree_sitter import Language, Parser
+from src.lang_scanning.ts_loader import create_parser_with_language
 from src.utils.import_graph_utils import append_graph_edge, walk_up_for_marker
 from src.lang_scanning.tree_utils import first_header_line, name_from_field
 
@@ -10,24 +10,23 @@ class CSharpAnalyzer:
         self.file_path = code_path
         self.source_code = self._load_source(code_path)
 
-        self.language = Language('build/languages.so', "c_sharp")
-        self.parser = Parser()
-        self.parser.set_language(self.language)
+        self.parser, self.language = create_parser_with_language("csharp")
 
         self.tree = self._parse(self.source_code)
 
     # ==================================================
     # core helpers
     def _parse(self, source_code: str):
-        return self.parser.parse(bytes(source_code, "utf8"))
+        return self.parser.parse(source_code)
 
     def _walk(self, node):
         yield node
-        for child in node.children:
+        for i in range(node.child_count()):
+            child = node.child(i)
             yield from self._walk(child)
 
     def _text(self, node, source_code: str) -> str:
-        return source_code[node.start_byte:node.end_byte]
+        return source_code[node.start_byte():node.end_byte()]
 
     def _load_source(self, file_path: str) -> str:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -38,8 +37,8 @@ class CSharpAnalyzer:
     def get_import_list(self):
         imports = []
         seen = set()
-        for node in self._walk(self.tree.root_node):
-            if node.type in ["using_directive"]:
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() in ["using_directive"]:
                 text = self._text(node, self.source_code).strip()
                 if text not in seen and text.startswith("using"):
                     seen.add(text)
@@ -88,8 +87,8 @@ class CSharpAnalyzer:
     def get_class_list(self):
         classes = []
         seen = set()
-        for node in self._walk(self.tree.root_node):
-            if node.type in ("class_declaration", "struct_declaration", "record_declaration"):
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() in ("class_declaration", "struct_declaration", "record_declaration"):
                 text = self._text(node, self.source_code).strip()
                 first_line = first_header_line(text)
                 if first_line not in seen:
@@ -106,8 +105,8 @@ class CSharpAnalyzer:
     def get_function_list(self):
         functions = []
         seen = set()
-        for node in self._walk(self.tree.root_node):
-            if node.type not in ("method_declaration", "local_function_statement"):
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() not in ("method_declaration", "local_function_statement"):
                 continue
             name = name_from_field(node, self.source_code)
             if name and name not in seen:
@@ -123,10 +122,10 @@ class CSharpAnalyzer:
     # comments
     def get_comment_lines(self):
         lines = set()
-        for node in self._walk(self.tree.root_node):
-            if "comment" in node.type:
-                start_line = node.start_point[0]
-                end_line = node.end_point[0]
+        for node in self._walk(self.tree.root_node()):
+            if "comment" in node.kind():
+                start_line = node.start_position().row
+                end_line = node.end_position().row
                 for i in range(start_line, end_line + 1):
                     lines.add(i)
 
@@ -150,12 +149,12 @@ class CSharpAnalyzer:
             "decrypt"
         ]
 
-        for node in self._walk(self.tree.root_node):
-            if node.type in ["using_directive"]:
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() in ["using_directive"]:
                 text = self._text(node, self.source_code).lower()
                 if any(i in text for i in crypto_imports):
                     return True
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(c in text for c in crypto_calls):
                 return True
@@ -169,9 +168,9 @@ class CSharpAnalyzer:
         }
 
         found = set()
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
-            if node.type in ["invocation_expression", "identifier"]:
+            if node.kind() in ["invocation_expression", "identifier"]:
                 for algo in crypto_algorithms:
                     if algo in text:
                         found.add(algo)
@@ -196,12 +195,12 @@ class CSharpAnalyzer:
             "select"
         ]
 
-        for node in self._walk(self.tree.root_node):
-            if node.type in ["using_directive"]:
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() in ["using_directive"]:
                 text = self._text(node, self.source_code).lower()
                 if any(d in text for d in db_imports):
                     return True
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(p in text for p in db_usage_patterns):
                 return True
@@ -227,8 +226,8 @@ class CSharpAnalyzer:
         ]
 
         found = set()
-        for node in self._walk(self.tree.root_node):
-            if node.type in ["invocation_expression", "identifier"]:
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() in ["invocation_expression", "identifier"]:
                 text = self._text(node, self.source_code).lower()
 
                 if any(op in text for op in db_operations):
@@ -248,7 +247,7 @@ class CSharpAnalyzer:
             "streamwriter",
             "filestream",
         ]
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(p in text for p in file_patterns):
                 return True
@@ -263,8 +262,8 @@ class CSharpAnalyzer:
             "system.net.http",
             "restsharp"
         ]
-        for node in self._walk(self.tree.root_node):
-            if node.type in ["using_directive"]:
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() in ["using_directive"]:
                 text = self._text(node, self.source_code).lower()
                 if any(n in text for n in network_imports):
                     return True
@@ -275,7 +274,7 @@ class CSharpAnalyzer:
             ".postasync",
             "websocket"
         ]
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(c in text for c in network_calls):
                 return True
@@ -285,8 +284,8 @@ class CSharpAnalyzer:
     # ==================================================
     # auth usage detection
     def get_contains_auth_usage(self):
-        for node in self._walk(self.tree.root_node):
-            if node.type in ["using_directive"]:
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() in ["using_directive"]:
                 text = self._text(node, self.source_code).lower()
                 if "microsoft.aspnetcore.identity" in text or "firebaseauth" in text:
                     return True
@@ -299,7 +298,7 @@ class CSharpAnalyzer:
             "jwt",
             "password"
         ]
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(p in text for p in auth_patterns):
                 return True
@@ -316,10 +315,17 @@ class CSharpAnalyzer:
             "sync"
         ]
 
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(p in text for p in backup_patterns):
                 return True
 
         return False
+
+
+
+
+
+
+
 

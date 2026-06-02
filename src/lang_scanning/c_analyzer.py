@@ -1,6 +1,6 @@
-import re
+﻿import re
 from pathlib import Path
-from tree_sitter import Language, Parser
+from src.lang_scanning.ts_loader import create_parser_with_language
 from src.utils.import_graph_utils import append_graph_edge
 
 
@@ -9,24 +9,23 @@ class CAnalyzer:
         self.file_path = code_path
         self.source_code = self._load_source(code_path)
 
-        self.language = Language('build/languages.so', "c")
-        self.parser = Parser()
-        self.parser.set_language(self.language)
+        self.parser, self.language = create_parser_with_language("c")
 
         self.tree = self._parse(self.source_code)
 
     # ==================================================
     # core helpers
     def _parse(self, source_code: str):
-        return self.parser.parse(bytes(source_code, "utf8"))
+        return self.parser.parse(source_code)
 
     def _walk(self, node):
         yield node
-        for child in node.children:
+        for i in range(node.child_count()):
+            child = node.child(i)
             yield from self._walk(child)
 
     def _text(self, node, source_code: str) -> str:
-        return source_code[node.start_byte:node.end_byte]
+        return source_code[node.start_byte():node.end_byte()]
 
     def _load_source(self, file_path: str) -> str:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -37,8 +36,8 @@ class CAnalyzer:
     def get_import_list(self):
         imports = []
         seen = set()
-        for node in self._walk(self.tree.root_node):
-            if node.type == "preproc_include":
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() == "preproc_include":
                 text = self._text(node, self.source_code).strip()
                 if text not in seen:
                     seen.add(text)
@@ -83,8 +82,8 @@ class CAnalyzer:
     def get_class_list(self):
         classes = []
         seen = set()
-        for node in self._walk(self.tree.root_node):
-            if node.type == "struct_specifier":
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() == "struct_specifier":
                 text = self._text(node, self.source_code).strip()
                 first_line = text.split("{")[0].strip()
                 if first_line not in seen:
@@ -101,8 +100,8 @@ class CAnalyzer:
     def get_function_list(self):
         functions = []
         seen = set()
-        for node in self._walk(self.tree.root_node):
-            if node.type == "function_definition":
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() == "function_definition":
                 text = self._text(node, self.source_code).strip()
                 if "(" in text:
                     name = text.split("(")[0].split()[-1].strip()
@@ -119,10 +118,10 @@ class CAnalyzer:
     # comments
     def get_comment_lines(self):
         lines = set()
-        for node in self._walk(self.tree.root_node):
-            if "comment" in node.type:
-                start_line = node.start_point[0]
-                end_line = node.end_point[0]
+        for node in self._walk(self.tree.root_node()):
+            if "comment" in node.kind():
+                start_line = node.start_position().row
+                end_line = node.end_position().row
                 for i in range(start_line, end_line + 1):
                     lines.add(i)
 
@@ -147,13 +146,13 @@ class CAnalyzer:
             "decrypt"
         ]
 
-        for node in self._walk(self.tree.root_node):
-            if node.type == "preproc_include":
+        for node in self._walk(self.tree.root_node()):
+            if node.kind() == "preproc_include":
                 text = self._text(node, self.source_code).lower()
                 if any(i in text for i in crypto_imports):
                     return True
 
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(c in text for c in crypto_calls):
                 return True
@@ -167,9 +166,9 @@ class CAnalyzer:
         }
 
         found = set()
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
-            if node.type in ["call_expression", "identifier"]:
+            if node.kind() in ["call_expression", "identifier"]:
                 for algo in crypto_algorithms:
                     if algo in text:
                         found.add(algo)
@@ -194,12 +193,12 @@ class CAnalyzer:
             "query"
         ]
 
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(d in text for d in db_keywords):
                 return True
 
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(op in text for op in db_ops):
                 return True
@@ -216,7 +215,7 @@ class CAnalyzer:
         ]
 
         found = set()
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             for table in known_tables:
                 if table in text:
@@ -236,7 +235,7 @@ class CAnalyzer:
             "ofstream"
         ]
 
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(f in text for f in file_keywords):
                 return True
@@ -255,7 +254,7 @@ class CAnalyzer:
             "curl"
         ]
 
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(n in text for n in network_keywords):
                 return True
@@ -273,7 +272,7 @@ class CAnalyzer:
             "password"
         ]
 
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(a in text for a in auth_keywords):
                 return True
@@ -291,9 +290,15 @@ class CAnalyzer:
             "import"
         ]
 
-        for node in self._walk(self.tree.root_node):
+        for node in self._walk(self.tree.root_node()):
             text = self._text(node, self.source_code).lower()
             if any(b in text for b in backup_keywords):
                 return True
 
         return False
+
+
+
+
+
+

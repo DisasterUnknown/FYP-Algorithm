@@ -1,40 +1,37 @@
-from pathlib import Path
+from tree_sitter_language_pack import get_parser
 
-from tree_sitter import Language
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-BUILD_DIR = PROJECT_ROOT / "build"
-OUTPUT_PATH = BUILD_DIR / "languages.so"
+SUPPORTED_LANGUAGES = [
+    "python",
+    "javascript",
+    "typescript",
+    "tsx",
+    "php",
+    "java",
+    "go",
+    "c",
+    "cpp",
+    "csharp",
+    "kotlin",
+    "swift",
+    "dart",
+    "ruby",
+]
 
-BUILD_DIR.mkdir(parents=True, exist_ok=True)
 
-Language.build_library(
-    str(OUTPUT_PATH),
-    [
-        # Python
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-python"),
+def main():
+    missing = []
+    for language in SUPPORTED_LANGUAGES:
+        try:
+            get_parser(language)
+        except Exception:
+            missing.append(language)
 
-        # JS / TS
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-javascript"),
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-typescript/typescript"),
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-typescript/tsx"),
+    if missing:
+        raise RuntimeError(f"Missing tree-sitter grammars: {', '.join(missing)}")
 
-        # Backend languages
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-php/php"),
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-java"),
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-go"),
+    print("Tree-sitter language pack ready for all configured languages.")
 
-        # Systems languages
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-c"),
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-cpp"),
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-c-sharp"),
 
-        # Mobile / modern
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-kotlin"),
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-swift"),
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-dart"),
-
-        # Scripting
-        str(PROJECT_ROOT / "tree_sitters/tree-sitter-ruby"),
-    ]
-)
+if __name__ == "__main__":
+    main()
