@@ -1,0 +1,21 @@
+{
+  "files": [
+    "E:/MY/Agent/src/agents/ai_agent.py",
+    "E:/MY/Agent/src/agents/rag_agent.py",
+    "E:/MY/Agent/src/agents/responce_reward_agent.py",
+    "E:/MY/Agent/src/agents/responce_validate_agent.py",
+    "E:/MY/Agent/src/agents/routing_agent.py",
+    "E:/MY/Agent/src/agents/web_search_agent.py",
+    "E:/MY/Agent/src/core/sys_msgs.py",
+    "E:/MY/Agent/src/models/llama_3_1_nemotron_70b_reward.py",
+    "E:/MY/Agent/src/models/llama_3_3_nemotron_super_49b_v1.py",
+    "E:/MY/Agent/src/models/nv_embed_v1.py",
+    "E:/MY/Agent/src/models/qwen3_next_80b_a3b_instruct.py",
+    "E:/MY/Agent/src/utils/context_getter.py",
+    "E:/MY/Agent/src/utils/duckduckgo_search.py",
+    "E:/MY/Agent/src/utils/embedding.py",
+    "E:/MY/Agent/src/utils/populate_database.py",
+    "E:/MY/Agent/src/utils/scrape_webpage.py",
+    "E:/MY/Agent/main.py"
+  ]
+}

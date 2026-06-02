@@ -8,6 +8,8 @@ def main_entry(files_list: list[Path]):
     file_nodes = node_create_service(files_list)
     file_nodes = graph_import_map_generation(file_nodes) 
 
+    print(file_nodes)
+
 
 data = json.loads(sys.stdin.read())
 files_list = [Path(f) for f in data["files"]]
