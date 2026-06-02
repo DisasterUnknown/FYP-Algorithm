@@ -1,0 +1,299 @@
+import re
+from pathlib import Path
+from tree_sitter import Language, Parser
+from src.utils.import_graph_utils import append_graph_edge
+
+
+class CAnalyzer:
+    def __init__(self, code_path: str):
+        self.file_path = code_path
+        self.source_code = self._load_source(code_path)
+
+        self.language = Language('build/languages.so', "c")
+        self.parser = Parser()
+        self.parser.set_language(self.language)
+
+        self.tree = self._parse(self.source_code)
+
+    # ==================================================
+    # core helpers
+    def _parse(self, source_code: str):
+        return self.parser.parse(bytes(source_code, "utf8"))
+
+    def _walk(self, node):
+        yield node
+        for child in node.children:
+            yield from self._walk(child)
+
+    def _text(self, node, source_code: str) -> str:
+        return source_code[node.start_byte:node.end_byte]
+
+    def _load_source(self, file_path: str) -> str:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+
+    # ==================================================
+    # imports
+    def get_import_list(self):
+        imports = []
+        seen = set()
+        for node in self._walk(self.tree.root_node):
+            if node.type == "preproc_include":
+                text = self._text(node, self.source_code).strip()
+                if text not in seen:
+                    seen.add(text)
+                    imports.append(text)
+
+        return imports
+
+    def get_number_of_imports(self):
+        return len(self.get_import_list())
+
+    def _resolve_c_include(self, line):
+        match = re.search(r'#include\s+"([^"]+)"', line)
+        if not match:
+            return None
+
+        header = match.group(1)
+        current_dir = Path(self.file_path).parent
+        candidate = (current_dir / header).resolve()
+        if candidate.is_file():
+            return candidate
+
+        for parent in Path(self.file_path).parents:
+            include_path = parent / "include" / header
+            if include_path.is_file():
+                return include_path
+        return None
+
+    def get_graph_incoming_edges(self):
+        edges = []
+        seen = set()
+        for line in self.get_import_list():
+            append_graph_edge(
+                edges,
+                seen,
+                self._resolve_c_include(line),
+                self.file_path,
+            )
+        return edges
+
+    # ==================================================
+    # classes
+    def get_class_list(self):
+        classes = []
+        seen = set()
+        for node in self._walk(self.tree.root_node):
+            if node.type == "struct_specifier":
+                text = self._text(node, self.source_code).strip()
+                first_line = text.split("{")[0].strip()
+                if first_line not in seen:
+                    seen.add(first_line)
+                    classes.append(first_line)
+
+        return classes
+
+    def get_number_of_classes(self):
+        return len(self.get_class_list())
+
+    # ==================================================
+    # functions / methods
+    def get_function_list(self):
+        functions = []
+        seen = set()
+        for node in self._walk(self.tree.root_node):
+            if node.type == "function_definition":
+                text = self._text(node, self.source_code).strip()
+                if "(" in text:
+                    name = text.split("(")[0].split()[-1].strip()
+                    if name not in seen:
+                        seen.add(name)
+                        functions.append(name)
+
+        return functions
+
+    def get_number_of_functions(self):
+        return len(self.get_function_list())
+
+    # ==================================================
+    # comments
+    def get_comment_lines(self):
+        lines = set()
+        for node in self._walk(self.tree.root_node):
+            if "comment" in node.type:
+                start_line = node.start_point[0]
+                end_line = node.end_point[0]
+                for i in range(start_line, end_line + 1):
+                    lines.add(i)
+
+        return len(lines)
+
+    # ==================================================
+    # crypto detection
+    def get_contains_crypto_usage(self):
+        crypto_imports = [
+            "#include <openssl",
+            "crypto",
+            "openssl"
+        ]
+        crypto_calls = [
+            "sha256",
+            "sha1",
+            "md5",
+            "aes",
+            "rsa",
+            "hmac",
+            "encrypt",
+            "decrypt"
+        ]
+
+        for node in self._walk(self.tree.root_node):
+            if node.type == "preproc_include":
+                text = self._text(node, self.source_code).lower()
+                if any(i in text for i in crypto_imports):
+                    return True
+
+        for node in self._walk(self.tree.root_node):
+            text = self._text(node, self.source_code).lower()
+            if any(c in text for c in crypto_calls):
+                return True
+
+        return False
+
+    def get_crypto_algorithms(self):
+        crypto_algorithms = {
+            "sha1", "sha256", "sha512", "md5",
+            "aes", "rsa", "ecdsa", "hmac"
+        }
+
+        found = set()
+        for node in self._walk(self.tree.root_node):
+            text = self._text(node, self.source_code).lower()
+            if node.type in ["call_expression", "identifier"]:
+                for algo in crypto_algorithms:
+                    if algo in text:
+                        found.add(algo)
+
+        return list(found)
+
+    # ==================================================
+    # database detection
+    def get_contains_database_access(self):
+        db_keywords = [
+            "sqlite",
+            "mysql",
+            "postgres",
+            "mongodb"
+        ]
+
+        db_ops = [
+            "select",
+            "insert",
+            "update",
+            "delete",
+            "query"
+        ]
+
+        for node in self._walk(self.tree.root_node):
+            text = self._text(node, self.source_code).lower()
+            if any(d in text for d in db_keywords):
+                return True
+
+        for node in self._walk(self.tree.root_node):
+            text = self._text(node, self.source_code).lower()
+            if any(op in text for op in db_ops):
+                return True
+
+        return False
+
+    def get_database_tables(self):
+        known_tables = [
+            "users",
+            "transactions",
+            "budget",
+            "categories",
+            "settings"
+        ]
+
+        found = set()
+        for node in self._walk(self.tree.root_node):
+            text = self._text(node, self.source_code).lower()
+            for table in known_tables:
+                if table in text:
+                    found.add(table)
+
+        return list(found)
+
+    # ==================================================
+    # file access detection
+    def get_contains_file_access(self):
+        file_keywords = [
+            "fopen",
+            "fread",
+            "fwrite",
+            "fclose",
+            "ifstream",
+            "ofstream"
+        ]
+
+        for node in self._walk(self.tree.root_node):
+            text = self._text(node, self.source_code).lower()
+            if any(f in text for f in file_keywords):
+                return True
+
+        return False
+
+    # ==================================================
+    # network access detection
+    def get_contains_network_access(self):
+        network_keywords = [
+            "socket",
+            "connect",
+            "send",
+            "recv",
+            "http",
+            "curl"
+        ]
+
+        for node in self._walk(self.tree.root_node):
+            text = self._text(node, self.source_code).lower()
+            if any(n in text for n in network_keywords):
+                return True
+
+        return False
+
+    # ==================================================
+    # auth usage detection
+    def get_contains_auth_usage(self):
+        auth_keywords = [
+            "login",
+            "auth",
+            "token",
+            "jwt",
+            "password"
+        ]
+
+        for node in self._walk(self.tree.root_node):
+            text = self._text(node, self.source_code).lower()
+            if any(a in text for a in auth_keywords):
+                return True
+
+        return False
+
+    # ==================================================
+    # backuplogic detection
+    def get_contains_backup_logic(self):
+        backup_keywords = [
+            "backup",
+            "restore",
+            "sync",
+            "export",
+            "import"
+        ]
+
+        for node in self._walk(self.tree.root_node):
+            text = self._text(node, self.source_code).lower()
+            if any(b in text for b in backup_keywords):
+                return True
+
+        return False

@@ -1,0 +1,41 @@
+using System.Diagnostics;
+using System.Text.Json;
+
+var files = new List<string>
+{
+    @"D:\Project\a.py",
+    @"D:\Project\b.py",
+    @"D:\Project\c.py"
+};
+
+var payload = new
+{
+    files = files,
+    mode = "ast_scan"
+};
+
+string json = JsonSerializer.Serialize(payload);
+
+var psi = new ProcessStartInfo
+{
+    FileName = "py",
+    Arguments = "main.py",
+    RedirectStandardInput = true,
+    RedirectStandardOutput = true,
+    RedirectStandardError = true,
+    UseShellExecute = false,
+    CreateNoWindow = true
+};
+
+var process = Process.Start(psi);
+
+await process.StandardInput.WriteAsync(json);
+process.StandardInput.Close();
+
+string output = await process.StandardOutput.ReadToEndAsync();
+await process.WaitForExitAsync();
+
+
+
+
+testing file run: type test.json | py main.py
