@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -38,3 +38,5 @@ class FileNode:
 
     graph_incoming_edges: Optional[List[str]] = field(default_factory=list)
     graph_outgoing_edges: Optional[List[str]] = field(default_factory=list)
+
+    candidate_domains: Dict[str, float] = field(default_factory=dict)

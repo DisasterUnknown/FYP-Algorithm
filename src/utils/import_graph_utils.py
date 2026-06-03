@@ -1,4 +1,3 @@
-"""Helpers for resolving local imports to graph_incoming_edges file paths."""
 import re
 from pathlib import Path
 from typing import Iterable, List, Optional
