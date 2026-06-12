@@ -11,6 +11,7 @@ from src.services.sensitivity_factor_calculation_service import sensitivity_fact
 from src.services.impact_calculation_service import impact_calculation_service
 from src.services.compilance_factor_calculation_service import compilance_factor_calculation_service
 from src.services.project_legacy_calculation_service import project_legacy_calculation_service
+from src.services.project_agility_bonus_calculation_service import project_agility_bonus_calculation
 
 def main_entry(files_list: list[Path]):
     file_nodes = node_create_service(files_list)
@@ -18,6 +19,7 @@ def main_entry(files_list: list[Path]):
     file_nodes = classify_file_nodes(file_nodes)
 
     project_legacy_value = project_legacy_calculation_service(file_nodes)
+    project_agility_bonus = project_agility_bonus_calculation(file_nodes)
 
     domain_sorted_nodes = domain_sorting(file_nodes)
     domain_complexity_score = complexity_calculation_service(domain_sorted_nodes)
@@ -31,7 +33,8 @@ def main_entry(files_list: list[Path]):
     print(domain_sensitivity_factor)
     print(domain_impact_score)
     print(domain_compliance_factor)
-    print(project_legacy_value)
+    print(f"Legacy: {project_legacy_value}")
+    print(f"Agility Bonus: {project_agility_bonus}")
 
 
 data = json.loads(sys.stdin.read())
