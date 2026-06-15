@@ -12,6 +12,7 @@ from src.services.impact_calculation_service import impact_calculation_service
 from src.services.compilance_factor_calculation_service import compilance_factor_calculation_service
 from src.services.project_legacy_calculation_service import project_legacy_calculation_service
 from src.services.project_agility_bonus_calculation_service import project_agility_bonus_calculation
+from src.core.risk_score_calculation_service import quantum_risk_algorithem
 
 def main_entry(files_list: list[Path]):
     file_nodes = node_create_service(files_list)
@@ -35,6 +36,20 @@ def main_entry(files_list: list[Path]):
     print(domain_compliance_factor)
     print(f"Legacy: {project_legacy_value}")
     print(f"Agility Bonus: {project_agility_bonus}")
+
+    #final algorithm calculation
+    final_risk_score = quantum_risk_algorithem(
+        domain_sorted_nodes,
+        domain_complexity_score,
+        domain_systems_score,
+        domain_sensitivity_factor,
+        domain_impact_score,
+        domain_compliance_factor,
+        project_legacy_value,
+        project_agility_bonus
+    )
+
+    print(f"\nFinal Risk Score: {final_risk_score}")
 
 
 data = json.loads(sys.stdin.read())
